@@ -1,18 +1,65 @@
 # ACM RecSys Twitter Challenge 2020
+[The Challenge](http://www.recsyschallenge.com/2020/)  
+[Data and Leaderboard](https://recsys-twitter.com)  
+
+__First Submission_ 15.6.2020  
+__Presentation__ 25.6.2020  
+__Final Submission__ 30.6.2020  
 
 # TODO
 ## 1 split data
-into train, test, dev
+* [ ] train, test, dev
 
 ## 2 create ground truth
-implement ["read predictions" function](https://recsys-twitter.com/code/snippets)
+* [ ] create ground truth .csv (engaging_user_id, tweet_id, engagement) - for each interaction type
+* [ ] implement ["read predictions" function](https://recsys-twitter.com/code/snippets)
 
 ## 3 create ratings matrix
 (for collaborative filtering approaches)  
-one matrix for each engagement type  
+one matrix for each engagement type
+* [ ] like matrix
+* [ ] reply matrix
+* [ ] retweet matrix
+* [ ] retweet with comment matrix
 
 ## 4 create adjacency matrix
-parse follower-following graph  
+* [ ] parse follower-following graph (engaged-follows-engaging)
+* [ ] how can you use this information?
 
-## 5 neural network
-implement the neural network approach from the [paper](ihttps://arxiv.org/abs/2004.13715)
+## 5 implement baseline classifier
+* [ ] implement cheap baseline clf
+* [ ] evaluate (PR-AUC, Cross-Entropy-Loss)
+* [ ] predict whole dataset
+* [ ] include scores in TUWEL wiki
+
+## 6 neural network
+* [ ] implement neural network approach from the [paper](https://arxiv.org/abs/2004.13715)
+* [ ] evaluate (PR-AUC, Cross-Entropy-Loss)
+
+## 7 iterate
+* [ ] "go beyond" collaborative filtering (ensemble?)
+* [ ] tune (hyper-)parameters
+* [ ] git --gud .
+* [ ] create final prediction
+
+## 8 write report ACM style
+* [ ] Intro
+* [ ] Approach
+* [ ] Show evaluation results
+* [ ] Conclusion
+
+## 9 submission
+* [ ] report.pdf - _ACM style report_
+* [ ] slides.pdf - _slides of group presentation_
+* [ ] src/ - _documented code_
+
+# Scoring
+## Data Intensive Computing VU 
+* Submission quality/non-trivial solution: 10p
+* Correct and efficient use of Spark resources: 15p
+* Code documentation: 5p
+* Report: 10p
+* Presentation: 10p
+
+## Recommender Systems VU
+* best effort ?
