@@ -2,9 +2,9 @@
 [The Challenge](http://www.recsyschallenge.com/2020/)  
 [Data and Leaderboard](https://recsys-twitter.com)  
 
-__First Submission_ 15.6.2020__
-__Presentation__ 25.6.2020__  
-__Final Submission__ 30.6.2020__    
+* First Submission - __15.6.2020__
+* Presentation - __25.6.2020__  
+* Final Submission - __30.6.2020__  
 
 # TODO
 ## 1 split data
