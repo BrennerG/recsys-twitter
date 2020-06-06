@@ -7,6 +7,11 @@
 * Final Submission - __30.6.2020__  
 
 # TODO
+## 0 preprocess data
+* [ ] transform text data
+* [ ] normalize numerical values
+* [ ] ...
+
 ## 1 split data
 * [ ] train, test, dev
 
@@ -39,6 +44,7 @@ one matrix for each engagement type
 ## 7 iterate
 * [ ] "go beyond" collaborative filtering (ensemble?)
 * [ ] tune (hyper-)parameters
+* [ ] additional feature engineering
 * [ ] git --gud .
 * [ ] create final prediction
 
