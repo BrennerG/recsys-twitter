@@ -5,12 +5,15 @@ class twitter_preproc:
     from pyspark import SparkContext, SparkConf
     
     
-    def __init__(self, spark:SparkSession, sc:SparkContext, inputFile:str, colnames:str, SCHEMA, seed:int=123):
+    def __init__(self, spark:SparkSession, sc:SparkContext, inputFile:str, colnames:str, SCHEMA, seed:int=123, MF:bool=False):
         self.sc = sc
         #inputRDD = sc.textFile(inputFile)
         #self.inputData = spark.read.option("sep", "\x01").csv(inputFile)
         self.inputData = spark.read.csv(path=inputFile, sep="\x01", header=False, schema=SCHEMA)
-        self._preprocess(seed)
+        if MF:
+            self._preprocessMF()
+        else:
+            self._preprocess(seed)
         #self.inputData = spark.createDataFrame(inputRDD, sep="\x01", schema=SCHEMA)    
     
     def getDF(self):
