@@ -29,13 +29,13 @@ class twitter_preproc:
         indexer = StringIndexer(inputCol="tweet_type", outputCol="tweet_type_id")
         outputDF = indexer.fit(outputDF).transform(outputDF)
         
-        indexer = 
+        #indexer = 
         
         encoder = OneHotEncoderEstimator(inputCols=["tweet_type_id"], outputCols=["tweet_type_onehot"])
         model = encoder.fit(outputDF)
         outputDF = model.transform(outputDF)
         # for explainability safe this
-        self.explainOneHotDF = data.select("tweet_type", "tweet_type_id", "tweet_type_onehot").show(30)
+        self.explainOneHotDF = outputDF.select("tweet_type", "tweet_type_id", "tweet_type_onehot")
         
         
         
