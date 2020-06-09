@@ -8,9 +8,26 @@
 
 # TODO
 ## 0 preprocess data
-* [ ] transform text data
-* [ ] normalize numerical values
-* [ ] ...
+* [ ] preprocess
+
+| Variables  | Processing |
+| ------------- | ------------- |
+| Text tokens | lookup for BERT embeddings |
+| Hashtags | TF-IDF transfo |
+| Tweet id | do not use |
+| Present media | one-hot (6 types) |
+| Present links | do not use |
+| Present domains | one-hot |
+| Tweet type | one-hot |
+| Language | one-hot |
+| UNIX timestamp | scale |
+| User id | do not use |
+| Follower count | scale |
+| Following count | scale |
+| Verified | use |
+| Account creation | scale |
+| Engagee follows engager | use |
+| Engagement timestamps (4x) | boolean |
 
 ## 1 split data
 * [ ] train, test, dev
