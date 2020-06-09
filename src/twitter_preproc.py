@@ -1,14 +1,38 @@
+from pyspark.sql import SparkSession
+from pyspark import SparkContext, SparkConf
+from pyspark.sql.types import *
 
 class twitter_preproc:
-
-    from pyspark.sql import SparkSession
-    from pyspark import SparkContext, SparkConf
-    
-    
-    def __init__(self, spark:SparkSession, sc:SparkContext, inputFile:str, colnames:str, SCHEMA, seed:int=123, MF:bool=False):
+    def __init__(self, spark:SparkSession, sc:SparkContext, inputFile:str, seed:int=123, MF:bool=False):
         self.sc = sc
         #inputRDD = sc.textFile(inputFile)
         #self.inputData = spark.read.option("sep", "\x01").csv(inputFile)
+        SCHEMA = StructType([
+                StructField("text_tokens", StringType()),
+                StructField("hashtags", StringType()),
+                StructField("tweet_id", StringType()),
+                StructField("present_media", StringType()),
+                StructField("present_links", StringType()),
+                StructField("present_domains", StringType()),
+                StructField("tweet_type", StringType()),
+                StructField("language", StringType()),
+                StructField("tweet_timestamp", LongType()),
+                StructField("engaged_with_user_id", StringType()),
+                StructField("engaged_with_user_follower_count", LongType()),
+                StructField("engaged_with_user_following_count", LongType()),
+                StructField("engaged_with_user_is_verified", BooleanType()),
+                StructField("engaged_with_user_account_creation", LongType()),
+                StructField("engaging_user_id", StringType()),
+                StructField("engaging_user_follower_count", LongType()),
+                StructField("engaging_user_following_count", LongType()),
+                StructField("engaging_user_is_verified", BooleanType()),
+                StructField("engaging_user_account_creation", LongType()),
+                StructField("engaged_follows_engaging", BooleanType()),
+                StructField("reply_timestamp", LongType()),
+                StructField("retweet_timestamp", LongType()),
+                StructField("retweet_with_comment_timestamp", LongType()),
+                StructField("like_timestamp", LongType())       
+                                ])
         self.inputData = spark.read.csv(path=inputFile, sep="\x01", header=False, schema=SCHEMA)
         if MF:
             self._preprocessMF()
@@ -22,10 +46,9 @@ class twitter_preproc:
     def _preprocessMF(self):
         outputDF = self.inputData
         
-        outputDF = outputDF.select(["tweet_id","engaged_user_id","engaged_with_user_id",
+        self.outputDF = outputDF.select(["tweet_id","engaging_user_id","engaged_with_user_id",
                                     "retweet_timestamp","reply_timestamp",
                                     "retweet_with_comment_timestamp","like_timestamp"])
-        return outputDF
         
         
     
