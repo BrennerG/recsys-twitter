@@ -5,7 +5,6 @@ from pyspark.sql.functions import *
 from pyspark.ml.feature import RegexTokenizer, OneHotEncoderEstimator, StringIndexer
 
 class twitter_preproc:
-    
     def __init__(self, spark:SparkSession, sc:SparkContext, inputFile:str, seed:int=123, MF:bool=False):
         self.sc = sc
         #inputRDD = sc.textFile(inputFile)
@@ -35,7 +34,7 @@ class twitter_preproc:
                 StructField("retweet_timestamp", LongType()),
                 StructField("retweet_with_comment_timestamp", LongType()),
                 StructField("like_timestamp", LongType())       
-            ])
+                                ])
         self.inputData = spark.read.csv(path=inputFile, sep="\x01", header=False, schema=SCHEMA)
         if MF:
             self._preprocessMF()
@@ -52,8 +51,6 @@ class twitter_preproc:
         self.outputDF = outputDF.select(["tweet_id","engaging_user_id","engaged_with_user_id",
                                     "retweet_timestamp","reply_timestamp",
                                     "retweet_with_comment_timestamp","like_timestamp"])
-    
-    
     
     def _preprocess(self, seed):
         
