@@ -5,7 +5,8 @@ from pyspark.sql.functions import *
 from pyspark.ml.feature import RegexTokenizer, OneHotEncoderEstimator, StringIndexer
 
 class twitter_preproc:
-    def __init__(self, spark:SparkSession, sc:SparkContext, inputFile:str, seed:int=123, MF:bool=False):
+    #CHANGED: Constructor MF:bool=True/False ---> method:str="MF"/"CB"/""
+    def __init__(self, spark:SparkSession, sc:SparkContext, inputFile:str, seed:int=123, method:str=""):
         self.sc = sc
         #inputRDD = sc.textFile(inputFile)
         #self.inputData = spark.read.option("sep", "\x01").csv(inputFile)
@@ -36,15 +37,26 @@ class twitter_preproc:
                 StructField("like_timestamp", LongType())       
                                 ])
         self.inputData = spark.read.csv(path=inputFile, sep="\x01", header=False, schema=SCHEMA)
-        if MF:
-            self._preprocessMF()
-        else:
+        
+        if(method==""):
             self._preprocess(seed)
+        elif(method=="MF"):
+            self._preprocessMF()
+        elif(method=="CB"):
+            self._preprocessCB()
+            
         #self.inputData = spark.createDataFrame(inputRDD, sep="\x01", schema=SCHEMA)    
     
     def getDF(self):
         return self.outputDF
     
+    def _preprocessCB(self):
+        outputDF = self.inputData
+        
+        self.outputDF = outputDF.select(["tweet_id","engaging_user_id","engaged_with_user_id",
+                                    "retweet_timestamp","reply_timestamp",
+                                    "retweet_with_comment_timestamp","like_timestamp","text_tokens"])
+            
     def _preprocessMF(self):
         outputDF = self.inputData
         
