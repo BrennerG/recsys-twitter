@@ -63,7 +63,7 @@ class twitter_preproc:
         
         # Drop unnecessary cols
         ### drop ids for classification
-        outputDF = outputDF.drop("tweet_id").drop("engaged_user_id").drop("engaged_with_user_id")\
+        outputDF = outputDF.drop("tweet_id").drop("engaged_user_id").drop("engaged_with_user_id").drop("engaging_user_id")\
                     .drop("present_links").drop("present_domains")
         
         # Split the text tokens to valid format
@@ -161,7 +161,7 @@ class twitter_preproc:
         outputDF = outputDF.drop(*["tweet_timestamp", "engaged_with_user_account_creation",
                                    "engaging_user_account_creation", "engaged_with_user_follower_count",
                                   "engaged_with_user_following_count", "engaging_user_follower_count",
-                                  "engaging_user_following_count"])
+                                  "engaging_user_following_count", "numeric_features"])
         
         # tf/idf text + hashtags
         ### hashtags
