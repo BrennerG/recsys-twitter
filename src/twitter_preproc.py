@@ -9,7 +9,7 @@ from pyspark.ml.feature import RegexTokenizer, OneHotEncoderEstimator, StringInd
 class twitter_preproc:
     
     def __init__(self, spark:SparkSession, sc:SparkContext, inputFile:str, seed:int=123,
-                 MF:bool=False, trainsplit:float=0.9):
+                 method:str="", trainsplit:float=0.9):
         
         self.sc = sc
         #inputRDD = sc.textFile(inputFile)
