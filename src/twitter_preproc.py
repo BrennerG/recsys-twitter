@@ -8,7 +8,7 @@ from pyspark.ml.feature import RegexTokenizer, OneHotEncoderEstimator, StringInd
 
 class twitter_preproc:
     
-    def __init__(self, spark:SparkSession, sc:SparkContext, inputFile:str, seed:int=123,
+    def __init__(self, spark:SparkSession, sc:SparkContext, trainFile:str, testFile:str="", seed:int=123,
                  MF:bool=False, trainsplit:float=0.9):
         
         self.sc = sc
@@ -40,18 +40,50 @@ class twitter_preproc:
                 StructField("retweet_with_comment_timestamp", LongType()),
                 StructField("like_timestamp", LongType())       
             ])
-        self.inputData = spark.read.csv(path=inputFile, sep="\x01", header=False, schema=SCHEMA)
+        
+        self.trainFile = spark.read.csv(path=trainFile, sep="\x01", header=False, schema=SCHEMA)
+        
         if MF:
             self._preprocessMF()
         else:
             self._preprocess(trainsplit, seed)
         #self.inputData = spark.createDataFrame(inputRDD, sep="\x01", schema=SCHEMA)    
+        
+        if testFile:
+            self.testFile = spark.read.csv(path=testFile, sep="\x01", header=False, schema=SCHEMA)
+            self._preprocessTest()
     
+    '''
+        get the outputDF of the class, which is the result of the input after all preprocessing steps
+    '''
     def getDF(self):
-        return self.outputDF
+        return self.processedTrainDF
+    
+    '''
+        get the preprocessed testDF
+    '''
+    def getTestDF(self):
+        return self.processedTestDF
+    
+    '''
+        return assembled DF, meaning all columsn from preprocessing steps are merged to one vector 
+        (this is need for sparkML). This drops the labels
+    '''
+    def _assemble(self, df):
+        
+        cols = df.columns
+        cols.remove("like") # remove labels and identifiers
+        cols.remove("retweet")
+        cols.remove("reply")
+        cols.remove("retweet_comment")
+        cols.remove("tweet_id")
+        cols.remove("engaging_user_id")
+        assembler = VectorAssembler(inputCols=cols, outputCol="all_features")
+        assembledDF = assembler.transform(df)
+        return assembledDF
     
     def _preprocessMF(self):
-        outputDF = self.inputData
+        outputDF = self.trainFile
         
         self.outputDF = outputDF.select(["tweet_id","engaging_user_id","engaged_with_user_id",
                                     "retweet_timestamp","reply_timestamp",
@@ -59,12 +91,14 @@ class twitter_preproc:
     
     def _preprocess(self, trainsplit, seed):
         
-        outputDF = self.inputData
+        outputDF = self.trainFile
         
         # Drop unnecessary cols
-        ### drop ids for classification
-        outputDF = outputDF.drop("tweet_id").drop("engaged_user_id").drop("engaged_with_user_id").drop("engaging_user_id")\
+        ### drop unused ids for classification
+        outputDF = outputDF.drop("engaged_with_user_id").drop("engaged_user_id")\
                     .drop("present_links").drop("present_domains")
+        #.drop("tweet_id")
+        #.drop("engaging_user_id")
         
         # Split the text tokens to valid format
         textTokenizer = RegexTokenizer(inputCol="text_tokens",outputCol="vector", pattern="\t")
@@ -86,23 +120,22 @@ class twitter_preproc:
 
         # OneHotEncode tweet_type
         ## TODO: user_id, engaged_user_id, ...
-        indexerTweetType = StringIndexer(inputCol="tweet_type", outputCol="tweet_type_id")
+        indexerTweetType = StringIndexer(inputCol="tweet_type", outputCol="tweet_type_id", handleInvalid="keep" )
         #outputDF = indexerTweetType.fit(outputDF).transform(outputDF)
-        indexerMedia = StringIndexer(inputCol="present_media", outputCol="present_media_id")
+        indexerMedia = StringIndexer(inputCol="present_media", outputCol="present_media_id", handleInvalid="keep")
         #outputDF = indexerMedia.fit(outputDF).transform(outputDF)
-        indexerLang = StringIndexer(inputCol="language", outputCol="language_id")
+        indexerLang = StringIndexer(inputCol="language", outputCol="language_id", handleInvalid="keep")
         #outputDF = indexerLang.fit(outputDF).transform(outputDF)
         
-        self.indexerPipeline = Pipeline(stages=[indexerTweetType, indexerMedia, indexerLang]) 
-        outputDF = self.indexerPipeline.fit(outputDF).transform(outputDF)
+        indexerPipeline = Pipeline(stages=[indexerTweetType, indexerMedia, indexerLang]) 
+        self.indexerModel = indexerPipeline.fit(outputDF)
+        outputDF = self.indexerModel.transform(outputDF)
         
         # onehot
         encoder = OneHotEncoderEstimator(inputCols=["tweet_type_id", "present_media_id", "language_id"],
                                          outputCols=["tweet_type_onehot", "present_media_onehot", "language_onehot"])
-        model = encoder.fit(outputDF)
-        outputDF = model.transform(outputDF)
-        
-        
+        self.encoderModel = encoder.fit(outputDF)
+        outputDF = self.encoderModel.transform(outputDF)
         
         # for explainability safe this
         self.explainOneHotDF = outputDF.select("tweet_type", "tweet_type_id", "tweet_type_onehot",
@@ -120,9 +153,23 @@ class twitter_preproc:
                                   "retweet_with_comment_timestamp","tweet_type","tweet_type_id",
                                  "language","language_id","present_media","present_media_id"])
         
-        # TODO: Train/Test split and Scaling
-        # create a train-test split
-        #train, test = outputDF.randomSplit([trainsplit, 1-trainsplit], seed=seed)
+        # tf/idf text + hashtags
+        ### hashtags
+        hashtagsTF = HashingTF(inputCol="hashtags", outputCol="hashtagsTF", numFeatures=2^10)
+        #outputDF = hashtagsTF.transform(outputDF)
+        hashtagsIDF = IDF(inputCol="hashtagsTF", outputCol="hashtags_idf")
+        #outputDF = self.hashtagsIDF.fit(outputDF).transform(outputDF)
+        
+        textTF = HashingTF(inputCol="text_tokens", outputCol="tweet_text_TF", numFeatures=2^14)
+        #outputDF = textTF.transform(outputDF)
+        textIDF = IDF(inputCol="tweet_text_TF", outputCol="tweet_text_idf")
+        #outputDF = self.textIDF.fit(outputDF).transform(outputDF)
+        
+        tfidfPipeline = Pipeline(stages=[hashtagsTF, hashtagsIDF, textTF, textIDF])
+        self.tfidfModel = tfidfPipeline.fit(outputDF)
+        outputDF = self.tfidfModel.transform(outputDF)
+        
+        outputDF = outputDF.drop(*["hashtags", "hashtagsTF", "text_tokens", "tweet_text_TF"])
         
         # scaling
         '''
@@ -154,8 +201,9 @@ class twitter_preproc:
         
 
         numericScaler = MinMaxScaler(inputCol="numeric_features", outputCol="numeric_scaled")
-        self.scalePipeline = Pipeline(stages=[assembler, numericScaler])
-        outputDF = self.scalePipeline.fit(outputDF).transform(outputDF)
+        scalePipeline = Pipeline(stages=[assembler, numericScaler])
+        self.scaleModel = scalePipeline.fit(outputDF)
+        outputDF = self.scaleModel.transform(outputDF)
         
         # drop numeric columns
         outputDF = outputDF.drop(*["tweet_timestamp", "engaged_with_user_account_creation",
@@ -163,21 +211,8 @@ class twitter_preproc:
                                   "engaged_with_user_following_count", "engaging_user_follower_count",
                                   "engaging_user_following_count", "numeric_features"])
         
-        # tf/idf text + hashtags
-        ### hashtags
-        hashtagsTF = HashingTF(inputCol="hashtags", outputCol="hashtagsTF", numFeatures=2^10)
-        outputDF = hashtagsTF.transform(outputDF)
-        hashtagsIDF = IDF(inputCol="hashtagsTF", outputCol="hashtags_idf")
-        outputDF = hashtagsIDF.fit(outputDF).transform(outputDF)
-        
-        TextTF = HashingTF(inputCol="text_tokens", outputCol="tweet_text_TF", numFeatures=2^14)
-        outputDF = TextTF.transform(outputDF)
-        TextIDF = IDF(inputCol="tweet_text_TF", outputCol="tweet_text_idf")
-        outputDF = TextIDF.fit(outputDF).transform(outputDF)
-        
-        outputDF = outputDF.drop(*["hashtags", "hashtagsTF", "text_tokens", "tweet_text_TF"])
-        
-        self.outputDF = outputDF
+        outputDF = self._assemble(outputDF)
+        self.processedTrainDF = outputDF
         
         # might not need
         # transform boolean to 0-1 column... first one has to change the type in the schema though 
@@ -185,10 +220,68 @@ class twitter_preproc:
         #    .replace(["false","true"], ["0","1"]).show()
         
         
+    '''
+        Preprocess test file if given...
+    '''
+    def _preprocessTest(self):
+        test = self.testFile
         
+        ### repeat all the steps that went place for train
+        # Drop unnecessary cols
+        ### drop unused ids for classification
+        test = test.drop("engaged_with_user_id").drop("engaged_user_id")\
+                    .drop("present_links").drop("present_domains")
+        
+        # Split the text tokens to valid format
+        textTokenizer = RegexTokenizer(inputCol="text_tokens",outputCol="vector", pattern="\t")
+        test = textTokenizer.transform(test)
+        hashtagTokenizer = RegexTokenizer(inputCol="hashtags",outputCol="hashtag_tokens", pattern="\t")
+        test = hashtagTokenizer.transform(test.fillna("none", subset=["hashtags"]))
+        
+        test = test.drop("text_tokens").withColumnRenamed("vector", "text_tokens")
+        test = test.drop("hashtags").withColumnRenamed("hashtag_tokens", "hashtags")
+        
+        regexTokenizer = RegexTokenizer(inputCol="present_media", outputCol="media_list")
+        test = regexTokenizer.transform(test.fillna("none", subset=["present_media"]))
+        test = test.drop("present_media").withColumnRenamed("media_list", "present_media")
+        test = test.withColumn("present_media2", test["present_media"].cast(StringType()))
+        test = test.drop("present_media").withColumnRenamed("present_media2", "present_media")
+        
+        ### REUSE MODELS FROM PROCESSING TRAIN
+        test = self.indexerModel.transform(test)
+        test = self.encoderModel.transform(test)
+        test = test.drop(*["tweet_type","tweet_type_id", "language","language_id","present_media","present_media_id"])
+        # tf/idf text + hashtags
+        test = self.tfidfModel.transform(test)
+        test = test.drop(*["hashtags", "hashtagsTF", "text_tokens", "tweet_text_TF"])
+
+        # scale numeric
+        test = self.scaleModel.transform(test)
+        
+        # drop numeric columns
+        test = test.drop(*["tweet_timestamp", "engaged_with_user_account_creation",
+                                   "engaging_user_account_creation", "engaged_with_user_follower_count",
+                                  "engaged_with_user_following_count", "engaging_user_follower_count",
+                                  "engaging_user_following_count", "numeric_features"])
+        
+        # rename target columns
+        test = test.withColumnRenamed("like_timestamp", "like")#.drop("like_timestamp")
+        test = test.withColumnRenamed("retweet_timestamp", "retweet")
+        test = test.withColumnRenamed("reply_timestamp", "reply")
+        test = test.withColumnRenamed("retweet_with_comment_timestamp", "retweet_comment")
+        test = self._assemble(test)
+        
+        #outputDF = outputDF.withColumn("like", when(outputDF["like_timestamp"].isNull(), 0).otherwise(1))
+        #outputDF = outputDF.withColumn("retweet", when(outputDF["retweet_timestamp"].isNull(), 0).otherwise(1))
+        #outputDF = outputDF.withColumn("reply", when(outputDF["reply_timestamp"].isNull(), 0).otherwise(1))
+        #outputDF = outputDF.withColumn("retweet_comment", when(outputDF["retweet_with_comment_timestamp"].isNull(), 0).otherwise(1))
+
+        
+        self.processedTestDF = test
+    
     '''
         returns small dataframe that explains the values of the oneHotEncoder step, this might be needed
         for mapping the encodings back to the original values
-    '''    
+    '''
     def explainOneHot(self):
         return self.explainOneHotDF
