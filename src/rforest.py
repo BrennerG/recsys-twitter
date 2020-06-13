@@ -18,12 +18,12 @@ spark = SparkSession \
     .getOrCreate()
 sc = spark.sparkContext
 
-train = "///tmp/traintweet_1000.tsv"
-testfile = "///user/e11920598/test_1000.tsv"
+#train = "///tmp/traintweet_1000.tsv"
+#testfile = "///user/e11920598/test_1000.tsv"
 # the full train file has 121.386.431 lines
-#train = "///user/pknees/RSC20/training.tsv"
+train = "///user/pknees/RSC20/training.tsv"
 # the full test file has 12.434.838 lines
-#train = "///user/pknees/RSC20/test.tsv"
+testfile = "///user/pknees/RSC20/test.tsv"
 
 preproc = twitter_preproc(spark, sc, train, testFile=testfile)
 
