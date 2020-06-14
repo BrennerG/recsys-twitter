@@ -23,7 +23,7 @@ sc = spark.sparkContext
 # the full train file has 121.386.431 lines
 train = "///user/pknees/RSC20/training.tsv"
 # the full test file has 12.434.838 lines
-testfile = "///user/pknees/RSC20/test.tsv"
+testfile = "///user/pknees/RSC20/val.tsv"
 
 preproc = twitter_preproc(spark, sc, train, testFile=testfile)
 
