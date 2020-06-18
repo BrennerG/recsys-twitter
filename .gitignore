@@ -131,3 +131,4 @@ dmypy.json
 # data
 traintweet_1000.tsv
 output/*.csv
+output/safe_/
