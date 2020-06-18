@@ -87,7 +87,8 @@ class twitter_preproc:
         
         self.outputDF = outputDF.select(["tweet_id","engaging_user_id","engaged_with_user_id",
                                     "retweet_timestamp","reply_timestamp",
-                                    "retweet_with_comment_timestamp","like_timestamp"])
+                                    "retweet_with_comment_timestamp","like_timestamp","text_tokens"])
+        self.processedTrainDF = outputDF
     
     def _preprocess(self, trainsplit, seed):
         
