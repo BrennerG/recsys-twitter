@@ -8,7 +8,7 @@
 
 # TODO
 ## 0 preprocess data
-* [ ] preprocess
+* [x] preprocess
 
 | Variables  | Processing |
 | ------------- | ------------- |
@@ -49,10 +49,10 @@ one matrix for each engagement type
 * [ ] how can you use this information?
 
 ## 5 implement baseline classifier
-* [ ] implement cheap baseline clf
-* [ ] evaluate (PR-AUC, Cross-Entropy-Loss)
-* [ ] predict whole dataset
-* [ ] include scores in TUWEL wiki
+* [x] implement cheap baseline clf
+* [x] evaluate (PR-AUC, Cross-Entropy-Loss)
+* [x] predict whole dataset
+* [x] include scores in TUWEL wiki
 
 ## 6 neural network
 * [ ] implement neural network approach from the [paper](https://arxiv.org/abs/2004.13715)
@@ -78,11 +78,11 @@ one matrix for each engagement type
 
 # Scoring
 ## Data Intensive Computing VU 
-* Submission quality/non-trivial solution: 10p
-* Correct and efficient use of Spark resources: 15p
-* Code documentation: 5p
-* Report: 10p
-* Presentation: 10p
+* [ ] Submission quality/non-trivial solution: 10p
+* [ ] Correct and efficient use of Spark resources: 15p
+* [ ] Code documentation: 5p
+* [ ] Report: 10p
+* [ ] Presentation: 10p
 
 ## Recommender Systems VU
 * best effort ?
