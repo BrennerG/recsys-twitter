@@ -9,7 +9,8 @@ from pyspark.sql.types import *
 import pyspark.sql.functions as F
 from IPython.display import display
 
-import mf_preprocessor
+from mf_preprocessor import *
+from recsys_evaluator import *
 
 class matrix_factorization:
 
@@ -20,6 +21,7 @@ class matrix_factorization:
         self.spark = spark
         self.sc = sc
         self.preproc = mf_preprocessor(self.spark, self.sc)
+        self.evaluator = recsys_evaluator(self.spark, self.sc)
 
     def read_train(self, train_file: str, is_preprocessed=True, n_users: int = 0, n_tweets: int = 0):
         self.train = self.read_file(train_file, is_preprocessed, n_users, n_tweets, delete_ids="train")
@@ -97,12 +99,11 @@ class matrix_factorization:
             
         return index_pairs
 
-    def train_evaluate(self, df_train, df_test, engagement, rank=10, alpha=1.0):
+    def train_evaluate(self, df_train, df_test, engagement, rank=10, alpha=1.0, thresholds=[0.5]):
         model, predictions = self.fit_transform(df_train, df_test, engagement, rank, alpha)
-        evaluator = RegressionEvaluator(metricName="rmse", labelCol=engagement, predictionCol="prediction")
-        rmse = evaluator.evaluate(predictions)
-        print("Root-mean-square error = " + str(rmse))
-        return model, predictions, rmse
+        areasUnderPR = self.evaluator.area_under_pr_curve(predictions, e_col=engagement, p_col="prediction", thresholds=thresholds)
+        log_loss = self.evaluator.log_loss(predictions, e_col=engagement, p_col="prediction")
+        return model, predictions, areasUnderPR, log_loss
 
     def train_predict(self, df_train, df_test, engagement, rank=10, alpha=1.0):
         model, predictions = self.fit_transform(df_train, df_test, engagement, rank, alpha)
