@@ -1,7 +1,4 @@
 import twitter_preproc
-import importlib
-importlib.reload(twitter_preproc)
-from twitter_preproc import *
 
 from pyspark import SparkConf, SparkContext
 from pyspark.sql import SparkSession, DataFrame

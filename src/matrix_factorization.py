@@ -10,9 +10,6 @@ import pyspark.sql.functions as F
 from IPython.display import display
 
 import mf_preprocessor
-import importlib
-importlib.reload(mf_preprocessor)
-from mf_preprocessor import *
 
 class matrix_factorization:
 
@@ -38,38 +35,41 @@ class matrix_factorization:
             return self.preproc.read_preprocessed(file_path)
         return self.preproc.read_raw(file_path, n_users, n_tweets, delete_ids)
 
-    def index_ids(self, df_train, df_test, index_files: dict = None):
+    def index_ids(self, df_train, df_test = None, index_files: dict = None):
         self.id_indices = {}
         id_columns = ["tweet_id", "engaging_user_id"]
         for id_column in id_columns:
             if index_files is None or id_column not in index_files:
-                df_id = df_train.unionByName(df_test).select(id_column).distinct()
+                df_id = df_train.select(id_column).distinct() if df_test is None else df_train.unionByName(df_test).select(id_column).distinct()
                 self.id_indices[id_column] = self.preproc.get_id_indices(df_id, id_column)
             else:
                 self.id_indices[id_column] = self.spark.read.csv(path=index_files[id_column], sep="\x01", header=True)
                 self.id_indices[id_column] = self.id_indices[id_column].withColumn(id_column + "_index", F.col(id_column + "_index").cast(LongType()))
             
             df_train = df_train.join(self.id_indices[id_column], [id_column]).drop(id_column)
-            df_test = df_test.join(self.id_indices[id_column], [id_column]).drop(id_column)
+            if df_test is not None:
+                df_test = df_test.join(self.id_indices[id_column], [id_column]).drop(id_column)
+        return df_train, df_test
+
+    def train_test_split(self, df, train_split=0.9):
+        df_train, df_test = df.randomSplit([train_split, 1 - train_split])
+        df_train = self.build_full_matrix(df_train, df_test, cross_join=True)
         return df_train, df_test
 
     def build_full_matrix(self, df_train, df_test, cross_join=False):
+        missing_tweet_indices = df_test.select("tweet_id_index").distinct()\
+            .subtract(df_train.select("tweet_id_index").distinct())
+        missing_user_indices = df_test.select("engaging_user_id_index").distinct()\
+            .subtract(df_train.select("engaging_user_id_index").distinct())
+        index_pairs = None
         if cross_join:
-            user_ids = df_train.unionByName(df_test).select("engaging_user_id_index").distinct()
-            tweet_ids = df_train.unionByName(df_test).select("tweet_id_index").distinct()
-            cross_joined = user_ids.join(tweet_ids)
-            self.full_train = cross_joined.join(df_train, ["engaging_user_id_index", "tweet_id_index"], how="left")
+            index_pairs = missing_tweet_indices.join(missing_user_indices)
         else:
-            missing_tweet_indices = df_test.select("tweet_id_index").distinct()\
-                .subtract(df_train.select("tweet_id_index").distinct())
-            missing_user_indices = df_test.select("engaging_user_id_index").distinct()\
-                .subtract(df_train.select("engaging_user_id_index").distinct())
-            
             index_pairs = self.concat_indices(missing_tweet_indices, missing_user_indices)
-            for engagement in self.ENGAGEMENTS():
-                index_pairs = index_pairs.withColumn(engagement, F.lit(0).cast(ByteType()))
-            
-            self.full_train = df_train.unionByName(index_pairs)
+        
+        for engagement in self.ENGAGEMENTS():
+            index_pairs = index_pairs.withColumn(engagement, F.lit(0).cast(ByteType()))       
+        return df_train.unionByName(index_pairs)
             
     def concat_indices(self, tweet_indices, user_indices):
         index_pairs = None
@@ -96,49 +96,22 @@ class matrix_factorization:
             raise NotImplementedError("Do implement")
             
         return index_pairs
-                    
 
-    def train_test_split(self, df, train_split=0.8, neg_ratio=1):
-        neg = self.get_negatives(df)
-        neg_train, neg_test = neg.randomSplit([train_split, 1 - train_split])
-        
-        self.train_sets = {}
-        self.test_sets = {}
-        for engagement in self.ENGAGEMENTS():
-            pos = self.get_positives(df, engagement)
-            pos_train, pos_test = pos.randomSplit([train_split, 1 - train_split])
-            
-            self.train_sets[engagement] = pos_train.unionByName(neg_train)
-            self.test_sets[engagement] = pos_test.unionByName(neg_test.limit(int(pos_test.count() * neg_ratio)))
-
-    def get_positives(self, df, engagement: str):
-        if engagement not in self.ENGAGEMENTS():
-            return df
-        return df.filter(F.col(engagement + "_timestamp").isNotNull())
-
-    def get_negatives(self, df):
-        return df\
-            .filter(F.col("like_timestamp").isNull())\
-            .filter(F.col("reply_timestamp").isNull())\
-            .filter(F.col("retweet_timestamp").isNull())\
-            .filter(F.col("retweet_with_comment_timestamp").isNull())
-
-    def train_evaluate(self, engagement):
-        (training, test) = self.train_sets[engagement], self.test_sets[engagement]
-        model, predictions = self.fit_transform(training, test, engagement)
+    def train_evaluate(self, df_train, df_test, engagement, rank=10, alpha=1.0):
+        model, predictions = self.fit_transform(df_train, df_test, engagement, rank, alpha)
         evaluator = RegressionEvaluator(metricName="rmse", labelCol=engagement, predictionCol="prediction")
         rmse = evaluator.evaluate(predictions)
         print("Root-mean-square error = " + str(rmse))
-        return predictions
+        return model, predictions, rmse
 
-    def train_predict(self, df_train, df_test, engagement, rank=10):
-        model, predictions = self.fit_transform(df_train, df_test, engagement, rank)
+    def train_predict(self, df_train, df_test, engagement, rank=10, alpha=1.0):
+        model, predictions = self.fit_transform(df_train, df_test, engagement, rank, alpha)
         return model, predictions
 
-    def fit_transform(self, training, test, engagement, rank=10):
+    def fit_transform(self, training, test, engagement, rank=10, alpha=1.0):
         # Build the recommendation model using ALS on the training data
         # Note we set cold start strategy to 'drop' to ensure we don't get NaN evaluation metrics
-        als = ALS(rank=rank, maxIter=5, regParam=0.01, userCol="engaging_user_id_index", itemCol="tweet_id_index", ratingCol=engagement,
+        als = ALS(rank=rank, alpha=alpha, maxIter=5, regParam=0.01, userCol="engaging_user_id_index", itemCol="tweet_id_index", ratingCol=engagement,
                 coldStartStrategy="drop", implicitPrefs=True)
         model = als.fit(training)
 
