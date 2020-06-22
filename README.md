@@ -30,48 +30,50 @@
 | Engagement timestamps (4x) | boolean |
 
 ## 1 split data
-* [ ] train, test, dev
+* [x] train, test, dev
 
 ## 2 create ground truth
-* [ ] create ground truth .csv (engaging_user_id, tweet_id, engagement) - for each interaction type
-* [ ] implement ["read predictions" function](https://recsys-twitter.com/code/snippets)
+* [x] create ground truth .csv (engaging_user_id, tweet_id, engagement) - for each interaction type
+* [x] implement ["read predictions" function](https://recsys-twitter.com/code/snippets)
 
-## 3 create ratings matrix
-(for collaborative filtering approaches)  
-one matrix for each engagement type
-* [ ] like matrix
-* [ ] reply matrix
-* [ ] retweet matrix
-* [ ] retweet with comment matrix
-
-## 4 create adjacency matrix
-* [ ] parse follower-following graph (engaged-follows-engaging)
-* [ ] how can you use this information?
-
-## 5 implement baseline classifier
+## 3 Implement Classifiers
+### A Decision Tree Classifier
 * [x] implement cheap baseline clf
 * [x] evaluate (PR-AUC, Cross-Entropy-Loss)
 * [x] predict whole dataset
 * [x] include scores in TUWEL wiki
 
-## 6 neural network
-* [ ] implement neural network approach from the [paper](https://arxiv.org/abs/2004.13715)
+### B Matrix Factorization
+* [ ] Prepare Features
+* [ ] Train
 * [ ] evaluate (PR-AUC, Cross-Entropy-Loss)
 
-## 7 iterate
+### C Content Based
+* [ ] Prepare Features
+* [ ] Train
+* [ ] evaluate (PR-AUC, Cross-Entropy-Loss)
+
+### D Neural network
+* [ ] research network approach from the [paper](https://arxiv.org/abs/2004.13715)
+* [ ] research Neural Collaborative Filtering [paper](https://arxiv.org/pdf/1708.05031.pdf)
+* [ ] Prepare Features
+* [ ] Train
+* [ ] evaluate (PR-AUC, Cross-Entropy-Loss)
+
+## 4 iterate
 * [ ] "go beyond" collaborative filtering (ensemble?)
 * [ ] tune (hyper-)parameters
 * [ ] additional feature engineering
 * [ ] git --gud .
 * [ ] create final prediction
 
-## 8 write report ACM style
+## 5 write report ACM style
 * [ ] Intro
 * [ ] Approach
 * [ ] Show evaluation results
 * [ ] Conclusion
 
-## 9 submission
+## 6 submission
 * [ ] report.pdf - _ACM style report_
 * [ ] slides.pdf - _slides of group presentation_
 * [ ] src/ - _documented code_

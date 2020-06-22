@@ -1,6 +1,3 @@
-import twitter_preproc
-import importlib
-importlib.reload(twitter_preproc)
 from twitter_preproc import *
 
 from pyspark import SparkConf, SparkContext
@@ -17,10 +14,12 @@ class mf_preprocessor:
         self.spark = spark
         self.sc = sc
     
-    def read_raw(self, inputFile: str, n_users: int = 0, n_tweets: int = 0):
+    def read_raw(self, inputFile: str, n_users: int = 0, n_tweets: int = 0, delete_ids=None):
         preproc = twitter_preproc(self.spark, self.sc, inputFile, MF=True)
-        df = preproc.getDF()
+        df = preproc.outputDF
         df = df.drop("engaged_with_user_id")
+        if delete_ids in ["train", "val"]:
+            df = self.remove_data(df, delete_ids=delete_ids)
         if n_users > 0:
             df = self.sample_users(df, n_users)
         if n_tweets > 0:
@@ -37,6 +36,24 @@ class mf_preprocessor:
         for long_column in long_columns:
             df = df.withColumn(long_column, df[long_column].cast(IntegerType()))
         
+        return df
+
+    def remove_data(self, df, delete_ids=None):
+        user_id_file = None
+        tweet_id_file = None
+        if delete_ids == "train":
+            user_id_file = "deleted_ids/train_engaging_user_id_deleted.tsv"
+            tweet_id_file = "deleted_ids/train_tweet_id_deleted.tsv"
+        elif delete_ids == "val":
+            user_id_file = "deleted_ids/val_engaging_user_id_deleted.tsv"
+            tweet_id_file = "deleted_ids/val_tweet_id_deleted.tsv"
+        else:
+            return df
+        
+        user_ids_deleted = self.spark.read.csv(user_id_file, header=False, schema=StructType([StructField("engaging_user_id", StringType())]))
+        tweet_ids_deleted = self.spark.read.csv(tweet_id_file, header=False, schema=StructType([StructField("tweet_id", StringType())]))
+        df = df.join(user_ids_deleted, ["engaging_user_id"], how="left_anti")
+        df = df.join(tweet_ids_deleted, ["tweet_id"], how="left_anti")
         return df
 
     def sample_users(self, df, n_users: int):
@@ -57,7 +74,7 @@ class mf_preprocessor:
 
     def timestamps_to_boolean(self, df):
         for engagement in self.ENGAGEMENTS():
-            df = df.withColumn(engagement, when(df[engagement + "_timestamp"].isNotNull(), 1).cast(ByteType()))\
+            df = df.withColumn(engagement, F.when(df[engagement + "_timestamp"].isNotNull(), 1).cast(ByteType()))\
                 .drop(engagement + "_timestamp")
         return df.fillna(0, subset=self.ENGAGEMENTS())
 
