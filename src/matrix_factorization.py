@@ -101,8 +101,7 @@ class matrix_factorization:
 
     def train_evaluate(self, df_train, df_test, engagement, rank=10, alpha=1.0, thresholds=[0.5]):
         model, predictions = self.fit_transform(df_train, df_test, engagement, rank, alpha)
-        areasUnderPR = self.evaluator.area_under_pr_curve(predictions, e_col=engagement, p_col="prediction", thresholds=thresholds)
-        log_loss = self.evaluator.log_loss(predictions, e_col=engagement, p_col="prediction")
+        areasUnderPR, log_loss = self.evaluate(predictions, engagement, thresholds)
         return model, predictions, areasUnderPR, log_loss
 
     def train_predict(self, df_train, df_test, engagement, rank=10, alpha=1.0):
@@ -119,8 +118,13 @@ class matrix_factorization:
         # Evaluate the model by computing the RMSE on the test data
         predictions = model.transform(test)
         return model, predictions
+    
+    def evaluate(self, predictions, engagement, thresholds):
+        areasUnderPR = self.evaluator.area_under_pr_curve(predictions, e_col=engagement, p_col="prediction", thresholds=thresholds)
+        log_loss = self.evaluator.log_loss(predictions, e_col=engagement, p_col="prediction")
+        return areasUnderPR, log_loss
 
-    def to_submission_format(self, predictions, index_files: dict):
+    def to_submission_format(self, predictions, index_files: dict, threshold=0.5):
         id_indices = {}
         id_columns = ["tweet_id", "engaging_user_id"]
         for id_column in id_columns:
@@ -128,7 +132,7 @@ class matrix_factorization:
             id_indices[id_column] = id_indices[id_column].withColumn(id_column + "_index", F.col(id_column + "_index").cast(IntegerType()))
             predictions = predictions.join(id_indices[id_column], [id_column + "_index"])\
                 .drop(id_column + "_index")
-        predictions = predictions.withColumn("prediction_bool", F.when(F.col("prediction") >= 0.5, 1).otherwise(0))
+        predictions = predictions.withColumn("prediction_bool", F.when(F.col("prediction") >= threshold, 1).otherwise(0))
         
         return predictions
 
