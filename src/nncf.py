@@ -58,7 +58,7 @@ train = "///user/pknees/RSC20/training.tsv"
 
 preproc = twitter_preproc(spark, sc, train)
 traindata = preproc.getDF()
-
+# TODO using the twitter_prepoc method for matrix factorization might be more efficient!
 
 # # INDEXING & ONE HOT ENCODING
 
