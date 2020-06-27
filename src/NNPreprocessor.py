@@ -21,7 +21,7 @@ class NNPreprocessor:
     def __init__(self):
         pass
     
-    def get_id_indices(self,df, id_column):
+    def get_id_indices(self, df, id_column):
         id_indices = df.select(id_column).orderBy(id_column).rdd.zipWithIndex().toDF()
         id_indices = id_indices.withColumn(id_column, Fun.col("_1")[id_column])\
             .select(Fun.col(id_column), Fun.col("_2").alias(id_column + "_index"))
@@ -50,7 +50,7 @@ class NNPreprocessor:
         shape = coo.shape
         return torch.sparse.FloatTensor(i, v, torch.Size(shape))
 
-    def nn_preprocess(self,data):
+    def nn_preprocess(self, data, engagement='like'):
         traindata = data
 
         # INDEXING & ONE-HOT ENCODING
@@ -65,11 +65,11 @@ class NNPreprocessor:
             OneHotEncoder(inputCol="tweet_id_index",  outputCol="tweet_id_ohe"),
             OneHotEncoder(inputCol="engaging_user_id_index",  outputCol="user_id_ohe")
         ])
-        model = pipeline.fit(indexed_data.select(['tweet_id_index', 'engaging_user_id_index', 'like']))
+        model = pipeline.fit(indexed_data.select(['tweet_id_index', 'engaging_user_id_index', engagement]))
         ohe = model.transform(indexed_data)
 
         # select and parse to pandas dataframe
-        df = pd.DataFrame(ohe.select(['tweet_id_ohe', 'user_id_ohe', 'like']).collect(), columns=['tweet_id_ohe', 'user_id_ohe', 'like'])
+        df = pd.DataFrame(ohe.select(['tweet_id_ohe', 'user_id_ohe', engagement]).collect(), columns=['tweet_id_ohe', 'user_id_ohe', engagement])
 
         # create tweets and users vector in correct format
         tweet_sparse = self.get_pytorch_sparse("tweet_id_ohe", ohe)
@@ -78,7 +78,7 @@ class NNPreprocessor:
         users = self.transform_to_sparse_tensor(user_sparse).to_dense()
 
         # create target variables in correct format
-        y = torch.FloatTensor(ohe.select("like").collect()) 
+        y = torch.FloatTensor(ohe.select(engagement).collect()) 
         target = y  
         target = target.view(1, -1).t()
 
