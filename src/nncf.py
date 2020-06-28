@@ -1,3 +1,9 @@
+
+# coding: utf-8
+
+# In[1]:
+
+
 import numpy as np
 from scipy.sparse import csr_matrix
 from scipy.sparse import vstack
@@ -23,13 +29,25 @@ import torch.optim as optim
 
 import sys, traceback
 
+
+# In[2]:
+
+
 # Building Spark Context
-conf = SparkConf().setAll([('spark.executor.memory', '5g'), ('spark.executor.cores', '30'), ('spark.driver.memory','8g')])
-spark = SparkSession  .builder   .appName("Pipelinee")   .config(conf=conf)   .getOrCreate()
+conf = SparkConf().setAll([('spark.executor.memory', '32g'), ('spark.executor.instances','8'),('spark.executor.cores', '12'), ('spark.driver.memory','64g'), ('spark.driver.memoryOverhead', '64g')])
+#conf = SparkConf()
+spark = SparkSession.builder.appName("nncf").config(conf=conf).getOrCreate()
 sc = spark.sparkContext
+
+
+# # PRE PROCESSING
+
+# In[65]:
+
 
 # Small datasets
 # train = "///tmp/traintweet_1000.tsv"
+# train = "///tmp/traintweet_10k.tsv"
 # test = "///user/e11920598/test_1000.tsv"
 
 # Full datasets
@@ -40,19 +58,44 @@ train = "///user/pknees/RSC20/training.tsv"
 
 preproc = twitter_preproc(spark, sc, train)
 traindata = preproc.getDF()
+# TODO using the twitter_prepoc method for matrix factorization might be more efficient!
 
-# Create Indices & One-Hot Vectors
-stages = []
-stages.append(StringIndexer(inputCol="tweet_id", outputCol="tweet_id_indexed"))
-stages.append(OneHotEncoder(inputCol="tweet_id_indexed",  outputCol="tweet_id_ohe"))
-stages.append(StringIndexer(inputCol="engaging_user_id", outputCol="user_id_indexed"))
-stages.append(OneHotEncoder(inputCol="user_id_indexed",  outputCol="user_id_ohe"))
-pipeline = Pipeline(stages=stages)
+# # INDEXING & ONE HOT ENCODING
 
-model = pipeline.fit(traindata)
-traindata_ohe = model.transform(traindata).select(["tweet_id_ohe","user_id_ohe","like"])
+# In[71]:
 
-df = pd.DataFrame(traindata_ohe.take(1000), columns=traindata_ohe.columns)
+
+import pyspark.sql.functions as Fun
+
+# used for StringIndexing
+# returns 2 columns: [original_id, indexed_id]
+def get_id_indices(df, id_column):
+        id_indices = df.select(id_column).orderBy(id_column).rdd.zipWithIndex().toDF()
+        id_indices = id_indices.withColumn(id_column, Fun.col("_1")[id_column])                .select(Fun.col(id_column), Fun.col("_2").alias(id_column + "_index"))
+        return id_indices
+
+# get indexed columns
+tweet_id_idx = get_id_indices(df=traindata, id_column="tweet_id")
+user_id_idx = get_id_indices(df=traindata, id_column="engaging_user_id")
+# rejoin the columns
+indexed_data = traindata.join(tweet_id_idx, ['tweet_id']).join(user_id_idx, ['engaging_user_id'])
+
+# one-hot-encode
+pipeline = Pipeline(stages=[
+    OneHotEncoder(inputCol="tweet_id_index",  outputCol="tweet_id_ohe"),
+    OneHotEncoder(inputCol="engaging_user_id_index",  outputCol="user_id_ohe")
+])
+model = pipeline.fit(indexed_data.select(['tweet_id_index', 'engaging_user_id_index', 'like']))
+traindata_ohe = model.transform(indexed_data)
+
+# select and parse to pandas dataframe
+df = pd.DataFrame(traindata_ohe.select(['tweet_id_ohe', 'user_id_ohe', 'like']).collect(), columns=['tweet_id_ohe', 'user_id_ohe', 'like'])
+
+
+# # MATRIX & VECTOR CONVERSIONS
+
+# In[81]:
+
 
 # map function to convert from spark vectors to sparse numpy csr matrix
 def as_matrix(vec):
@@ -67,8 +110,6 @@ def get_pytorch_sparse(attr):
     mat = mats.reduce(lambda x, y: vstack([x, y]))
     return mat
 
-
-# Neural Network time :)
 # convert to pytorch format
 def transform_to_sparse_tensor(data):
     coo = data.tocoo()
@@ -80,7 +121,6 @@ def transform_to_sparse_tensor(data):
 
     return torch.sparse.FloatTensor(i, v, torch.Size(shape))
 
-
 # convert matrices to pytorch tensor format
 tweet_sparse = get_pytorch_sparse("tweet_id_ohe")
 user_sparse = get_pytorch_sparse("user_id_ohe")
@@ -91,6 +131,11 @@ user_sparse = transform_to_sparse_tensor(user_sparse).to_dense()
 y = torch.FloatTensor(traindata_ohe.select("like").collect()) 
 target = y  
 target = target.view(1, -1).t()
+
+
+# # NEURAL NETWORK
+
+# In[119]:
 
 
 # Define Neural Network
@@ -116,20 +161,27 @@ class Net(nn.Module):
         return x
 
 
-# Initialize Neural Network
-net = Net(user_sparse, tweet_sparse, 100)
-output = net(user_sparse, tweet_sparse)
+# Initalize Hyperparameters
+k = 32
 criterion = nn.BCELoss()
-optimizer = optim.SGD(net.parameters(), lr=0.01)
-print("\n\n", net)
+optimizer = optim.SGD(net.parameters(), lr=0.0001)
+n_epochs = 1
+batch_size = 1024
+
+# Initialize Neural Network
+net = Net(user_sparse, tweet_sparse, k)
+output = net(user_sparse, tweet_sparse)
+print('\n\n',net)
+
+
+# # TRAINING
+
+# In[121]:
+
 
 print("\nStart Training")
-# Specifiy Training Loop
-n_epochs = 1
-batch_size = 100000
-
 for epoch in range(n_epochs):
-    print("epoch ", epoch)
+    print("epoch ", epoch+1)
 
     try:
     # X is a torch Variable
@@ -143,20 +195,23 @@ for epoch in range(n_epochs):
             batch_x_tweet = tweet_sparse[indices]
             batch_y = target[indices]
 
-            # in case you wanted a semi-full example
             outputs = net.forward(batch_x_user, batch_x_tweet)
             loss = criterion(outputs,batch_y)
-
             loss.backward()
             optimizer.step()
+            
             print(loss)
 
     except:
         traceback.print_stack()
 
+
+# In[ ]:
+
+
 # Save the model
 PATH = './NNCF_model_save.pth'
 torch.save(net.state_dict(), PATH)
 
-
 print("\n\nDONE. model saved to ", PATH, "\n\n")
+

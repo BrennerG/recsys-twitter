@@ -70,7 +70,8 @@ class matrix_factorization:
             index_pairs = self.concat_indices(missing_tweet_indices, missing_user_indices)
         
         for engagement in self.ENGAGEMENTS():
-            index_pairs = index_pairs.withColumn(engagement, F.lit(0).cast(ByteType()))       
+            index_pairs = index_pairs.withColumn(engagement, F.lit(0).cast(ByteType()))    
+            
         return df_train.unionByName(index_pairs)
             
     def concat_indices(self, tweet_indices, user_indices):
@@ -78,17 +79,13 @@ class matrix_factorization:
         n_tweet_indices = tweet_indices.count()
         n_user_indices = user_indices.count()
         if n_tweet_indices >= n_user_indices:
-            user_join_index = user_indices.rdd.zipWithIndex().toDF()
-            user_join_index = user_join_index.withColumn("engaging_user_id_index", F.col("_1")["engaging_user_id_index"])\
-                                .select(F.col("engaging_user_id_index"), F.col("_2").alias("join_index"))
+            user_join_index = self.preproc.get_id_indices(user_indices, "engaging_user_id_index").withColumnRenamed("engaging_user_id_index_index", "join_index")
             while n_tweet_indices > 0:
                 zipping_tweets = tweet_indices.limit(n_user_indices)
                 tweet_indices = tweet_indices.subtract(zipping_tweets)
                 n_tweet_indices -= n_user_indices
 
-                tweets_join_index = zipping_tweets.rdd.zipWithIndex().toDF()
-                tweets_join_index = tweets_join_index.withColumn("tweet_id_index", F.col("_1")["tweet_id_index"])\
-                                .select(F.col("tweet_id_index"), F.col("_2").alias("join_index"))
+                tweets_join_index = self.preproc.get_id_indices(zipping_tweets, "tweet_id_index").withColumnRenamed("tweet_id_index_index", "join_index")
                 joined = user_join_index.join(tweets_join_index, ["join_index"]).drop("join_index")
                 if index_pairs is None:
                     index_pairs = joined
@@ -101,8 +98,7 @@ class matrix_factorization:
 
     def train_evaluate(self, df_train, df_test, engagement, rank=10, alpha=1.0, thresholds=[0.5]):
         model, predictions = self.fit_transform(df_train, df_test, engagement, rank, alpha)
-        areasUnderPR = self.evaluator.area_under_pr_curve(predictions, e_col=engagement, p_col="prediction", thresholds=thresholds)
-        log_loss = self.evaluator.log_loss(predictions, e_col=engagement, p_col="prediction")
+        areasUnderPR, log_loss = self.evaluate(predictions, engagement, thresholds)
         return model, predictions, areasUnderPR, log_loss
 
     def train_predict(self, df_train, df_test, engagement, rank=10, alpha=1.0):
@@ -119,8 +115,13 @@ class matrix_factorization:
         # Evaluate the model by computing the RMSE on the test data
         predictions = model.transform(test)
         return model, predictions
+    
+    def evaluate(self, predictions, engagement, thresholds):
+        areasUnderPR = self.evaluator.area_under_pr_curve(predictions, e_col=engagement, p_col="prediction", thresholds=thresholds)
+        log_loss = self.evaluator.log_loss(predictions, e_col=engagement, p_col="prediction")
+        return areasUnderPR, log_loss
 
-    def to_submission_format(self, predictions, index_files: dict):
+    def to_submission_format(self, predictions, index_files: dict, threshold=0.5):
         id_indices = {}
         id_columns = ["tweet_id", "engaging_user_id"]
         for id_column in id_columns:
@@ -128,7 +129,7 @@ class matrix_factorization:
             id_indices[id_column] = id_indices[id_column].withColumn(id_column + "_index", F.col(id_column + "_index").cast(IntegerType()))
             predictions = predictions.join(id_indices[id_column], [id_column + "_index"])\
                 .drop(id_column + "_index")
-        predictions = predictions.withColumn("prediction_bool", F.when(F.col("prediction") >= 0.5, 1).otherwise(0))
+        predictions = predictions.withColumn("prediction_bool", F.when(F.col("prediction") >= threshold, 1).otherwise(0))
         
         return predictions
 
