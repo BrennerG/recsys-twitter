@@ -51,8 +51,12 @@ class twitter_preproc:
         
         if testFile:
             self.testFile = spark.read.csv(path=testFile, sep="\x01", header=False, schema=SCHEMA)
-            self._preprocessTest()
-    
+            
+            if MF: 
+                self._preprocessMF_test()
+            else:
+                self._preprocessTest()
+            
     '''
         get the outputDF of the class, which is the result of the input after all preprocessing steps
     '''
@@ -84,10 +88,27 @@ class twitter_preproc:
     
     def _preprocessMF(self):
         outputDF = self.trainFile
+        outputDF = outputDF.withColumn("like", when(outputDF["like_timestamp"].isNull(), 0).otherwise(1))
+        outputDF = outputDF.withColumn("retweet", when(outputDF["retweet_timestamp"].isNull(), 0).otherwise(1))
+        outputDF = outputDF.withColumn("reply", when(outputDF["reply_timestamp"].isNull(), 0).otherwise(1))
+        outputDF = outputDF.withColumn("retweet_comment", when(outputDF["retweet_with_comment_timestamp"].isNull(), 0).otherwise(1))
         
         self.outputDF = outputDF.select(["tweet_id","engaging_user_id","engaged_with_user_id",
                                     "retweet_timestamp","reply_timestamp",
+                                    "retweet_with_comment_timestamp","like_timestamp"]) 
+        self.processedTrainDF = outputDF
+        
+    def _preprocessMF_test(self):
+        test = self.testFile
+        test = test.withColumn("like", when(test["like_timestamp"].isNull(), 0).otherwise(1))
+        test = test.withColumn("retweet", when(test["retweet_timestamp"].isNull(), 0).otherwise(1))
+        test = test.withColumn("reply", when(test["reply_timestamp"].isNull(), 0).otherwise(1))
+        test = test.withColumn("retweet_comment", when(test["retweet_with_comment_timestamp"].isNull(), 0).otherwise(1))      
+        
+        self.test = test.select(["tweet_id","engaging_user_id","engaged_with_user_id",
+                                    "retweet_timestamp","reply_timestamp",
                                     "retweet_with_comment_timestamp","like_timestamp"])
+        self.processedTestDF = test
     
     def _preprocess(self, trainsplit, seed):
         
@@ -276,7 +297,6 @@ class twitter_preproc:
         #outputDF = outputDF.withColumn("reply", when(outputDF["reply_timestamp"].isNull(), 0).otherwise(1))
         #outputDF = outputDF.withColumn("retweet_comment", when(outputDF["retweet_with_comment_timestamp"].isNull(), 0).otherwise(1))
 
-        
         self.processedTestDF = test
     
     '''
