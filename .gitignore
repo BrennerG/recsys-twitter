@@ -132,4 +132,3 @@ dmypy.json
 traintweet_1000.tsv
 output/*.csv
 output/safe_/
-output/*.tar.gz
