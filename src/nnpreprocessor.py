@@ -65,20 +65,26 @@ class NNPreprocessor:
         model = pipeline.fit(indexed_data.select(['tweet_id_index', 'engaging_user_id_index', engagement]))
         traindata_ohe = model.transform(indexed_data)
 
-        # select and parse to pandas dataframe
+        '''# select and parse to pandas dataframe
         df = pd.DataFrame(traindata_ohe.select(['tweet_id_ohe', 'user_id_ohe', engagement]).collect(), columns=['tweet_id_ohe', 'user_id_ohe', engagement])
 
         # create tweets and users vector in correct format    
         tweet_sparse = self.get_pytorch_sparse("tweet_id_ohe", traindata_ohe)
         user_sparse = self.get_pytorch_sparse("user_id_ohe", traindata_ohe)
         tweets = self.transform_to_sparse_tensor(tweet_sparse).to_dense()
-        users = self.transform_to_sparse_tensor(user_sparse).to_dense()
+        users = self.transform_to_sparse_tensor(user_sparse).to_dense()'''
         
-        # create target variables in correct format
-        y = torch.FloatTensor(traindata_ohe.select("like").collect()) 
+        # collect one hot encodings
+        tweets = torch.FloatTensor(traindata_ohe.select('tweet_id_ohe').collect())
+        tweets = torch.squeeze(tweets, 1)
+        users = torch.FloatTensor(traindata_ohe.select('user_id_ohe').collect()) 
+        users = torch.squeeze(users, 1)
+        
+        # create target variables in correct format        
+        y = torch.FloatTensor(traindata_ohe.select(engagement).collect()) 
         target = y  
         target = target.view(1, -1).t()
-
+        
         return tweets, users, target
     
     def pad(self, tweets, users, target, dim):  
