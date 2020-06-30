@@ -15,13 +15,11 @@ from pyspark.ml.feature import OneHotEncoder
 from pyspark.ml import Pipeline
 import torch
 import sys, traceback
+import torch.nn.functional as F
 
 class NNPreprocessor:
 
-    def __init__(self):
-        pass
-    
-    def get_id_indices(self, df, id_column):
+    def get_id_indices(self,df, id_column):
         id_indices = df.select(id_column).orderBy(id_column).rdd.zipWithIndex().toDF()
         id_indices = id_indices.withColumn(id_column, Fun.col("_1")[id_column])\
             .select(Fun.col(id_column), Fun.col("_2").alias(id_column + "_index"))
@@ -33,7 +31,6 @@ class NNPreprocessor:
         shape = 1, vec.size
         return csr_matrix((data, indices, np.array([0, vec.values.size])), shape)
 
-    # calls as_matrix
     def get_pytorch_sparse(self, attr, traindata_ohe):
         features = traindata_ohe.rdd.map(attrgetter(attr))
         mats = features.map(lambda vec: csr_matrix((vec.values, vec.indices, np.array([0, vec.values.size])), (1,vec.size)))
@@ -66,20 +63,35 @@ class NNPreprocessor:
             OneHotEncoder(inputCol="engaging_user_id_index",  outputCol="user_id_ohe")
         ])
         model = pipeline.fit(indexed_data.select(['tweet_id_index', 'engaging_user_id_index', engagement]))
-        ohe = model.transform(indexed_data)
+        traindata_ohe = model.transform(indexed_data)
 
-        # select and parse to pandas dataframe
-        df = pd.DataFrame(ohe.select(['tweet_id_ohe', 'user_id_ohe', engagement]).collect(), columns=['tweet_id_ohe', 'user_id_ohe', engagement])
+        '''# select and parse to pandas dataframe
+        df = pd.DataFrame(traindata_ohe.select(['tweet_id_ohe', 'user_id_ohe', engagement]).collect(), columns=['tweet_id_ohe', 'user_id_ohe', engagement])
 
-        # create tweets and users vector in correct format
-        tweet_sparse = self.get_pytorch_sparse("tweet_id_ohe", ohe)
-        user_sparse = self.get_pytorch_sparse("user_id_ohe", ohe)
+        # create tweets and users vector in correct format    
+        tweet_sparse = self.get_pytorch_sparse("tweet_id_ohe", traindata_ohe)
+        user_sparse = self.get_pytorch_sparse("user_id_ohe", traindata_ohe)
         tweets = self.transform_to_sparse_tensor(tweet_sparse).to_dense()
-        users = self.transform_to_sparse_tensor(user_sparse).to_dense()
-
-        # create target variables in correct format
-        y = torch.FloatTensor(ohe.select(engagement).collect()) 
+        users = self.transform_to_sparse_tensor(user_sparse).to_dense()'''
+        
+        # collect one hot encodings
+        tweets = torch.FloatTensor(traindata_ohe.select('tweet_id_ohe').collect())
+        tweets = torch.squeeze(tweets, 1)
+        users = torch.FloatTensor(traindata_ohe.select('user_id_ohe').collect()) 
+        users = torch.squeeze(users, 1)
+        
+        # create target variables in correct format        
+        y = torch.FloatTensor(traindata_ohe.select(engagement).collect()) 
         target = y  
         target = target.view(1, -1).t()
-
+        
         return tweets, users, target
+    
+    def pad(self, tweets, users, target, dim):  
+        padding_users = dim - users.shape[1] - 1
+        padding_tweets = dim - tweets.shape[1] - 1
+        # padding_target = dim - target.shape[0] - 1
+        padded_users = F.pad(users, (padding_users,1))
+        padded_tweets = F.pad(tweets, (padding_tweets,1))
+        # padded_target = F.pad(target, (padding_target, 1))
+        return padded_tweets, padded_users, target

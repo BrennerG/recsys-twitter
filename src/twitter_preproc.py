@@ -8,7 +8,7 @@ from pyspark.ml.feature import RegexTokenizer, OneHotEncoderEstimator, StringInd
 
 class twitter_preproc:
     
-    def __init__(self, spark:SparkSession, sc:SparkContext, trainFile:str, testFile:str="", seed:int=123,
+    def __init__(self, spark:SparkSession, sc:SparkContext, trainFile:str, testFile:str="", valFile:str="", seed:int=123,
                  MF:bool=False, trainsplit:float=0.9):
         
         self.sc = sc
@@ -49,14 +49,20 @@ class twitter_preproc:
             self._preprocess(trainsplit, seed)
         #self.inputData = spark.createDataFrame(inputRDD, sep="\x01", schema=SCHEMA)    
         
+        #if MF: 
+        #    self._preprocessMF_test()  
+        
         if testFile:
             self.testFile = spark.read.csv(path=testFile, sep="\x01", header=False, schema=SCHEMA)
+            self._preprocessTest(testFile=True)
+        
+        if valFile:
+            self.valFile = spark.read.csv(path=valFile, sep="\x01", header=False, schema=SCHEMA)
+            self._preprocessTest(testFile=False)
             
-            if MF: 
-                self._preprocessMF_test()
-            else:
-                self._preprocessTest()
-            
+
+
+        
     '''
         get the outputDF of the class, which is the result of the input after all preprocessing steps
     '''
@@ -68,6 +74,12 @@ class twitter_preproc:
     '''
     def getTestDF(self):
         return self.processedTestDF
+    
+    '''
+        get the preprocessed testDF
+    '''
+    def getValDF(self):
+        return self.processedValDF
     
     '''
         return assembled DF, meaning all columsn from preprocessing steps are merged to one vector 
@@ -244,8 +256,11 @@ class twitter_preproc:
     '''
         Preprocess test file if given...
     '''
-    def _preprocessTest(self):
-        test = self.testFile
+    def _preprocessTest(self, testFile:bool=True):
+        if testFile==True:
+            test = self.testFile
+        elif testFile==False:
+            test = self.valFile
         
         ### repeat all the steps that went place for train
         # Drop unnecessary cols
@@ -297,7 +312,10 @@ class twitter_preproc:
         #outputDF = outputDF.withColumn("reply", when(outputDF["reply_timestamp"].isNull(), 0).otherwise(1))
         #outputDF = outputDF.withColumn("retweet_comment", when(outputDF["retweet_with_comment_timestamp"].isNull(), 0).otherwise(1))
 
-        self.processedTestDF = test
+        if testFile == True:
+            self.processedTestDF = test
+        elif testFile == False:
+            self.processedValDF = test
     
     '''
         returns small dataframe that explains the values of the oneHotEncoder step, this might be needed
