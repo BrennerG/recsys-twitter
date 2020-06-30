@@ -14,5 +14,5 @@ for out in files:
     df = pd.read_csv(fpath)
     print("finished reading "+out)
     df["positive_probability"] = df.apply(lambda row: row["probability"][1:-1].split(",")[1], axis=1)
-    df[cols].to_csv(outpath+out+"_format.csv", header=False, index=False)
+    df[cols].to_csv(outpath+out+"_format.csv", header=True, index=False)
     print("finished writing " + out)
