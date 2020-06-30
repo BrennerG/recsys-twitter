@@ -20,28 +20,28 @@ class ensemble:
         self.evaluator = recsys_evaluator(self.spark, self.sc)
         self.INDEX_COLS = ["engaging_user_id", "tweet_id"]
 
-    def train(self, prediction_files: Dict[str, str], label_file: str):
+    def train(self, prediction_files: Dict[str, str], prediction_schemas: Dict[str, StructType], label_file: str, engagement: str):
         """
-        :param prediction_files: dict of model names with hdfs paths containg their predictions as tsv, including the columns "engaging_user_id", "tweet_id", "prediction"
-        :param label_file: hdfs path containing the labels as tsv, including "engaging_user_id", "tweet_id", "label"
+        :param prediction_files: dict of model names with hdfs paths containg their predictions as tsv, including the columns "engaging_user_id", "tweet_id", "prediction" or specified in schema
+        :param label_file: hdfs path containing the labels as tsv, including "engaging_user_id", "tweet_id", `engagement`
         """
-        predictions_per_model = self.read_predictions(prediction_files)
+        predictions_per_model = self.read_predictions(prediction_files, prediction_schemas)
         predictions = self.join_and_vectorize_predictions(predictions_per_model)
-        labels = self.read_labels(label_file)
+        labels = self.read_labels(label_file, engagement)
         
         train_df = predictions.join(labels, self.INDEX_COLS)
         lr_model = LinearRegression(featuresCol="features", labelCol="label", elasticNetParam=0.0).fit(train_df)
-        print("RMSE: {}".format(lr_model.summary.rootMeanSquaredError))
         return lr_model
 
-    def test_evaluate(self, lr_model: LinearRegressionModel, prediction_files: Dict[str, str], label_file: str, thresholds: List[float]):
+    def test_evaluate(self, lr_model: LinearRegressionModel, prediction_files: Dict[str, str], prediction_schemas: Dict[str, StructType], 
+        label_file: str, engagement: str, thresholds: List[float]):
         """
         :param prediction_files: dict of model names with hdfs paths containg their predictions as tsv, including the columns "engaging_user_id", "tweet_id", "prediction"
-        :param label_file: hdfs path containing the labels as tsv, including "engaging_user_id", "tweet_id", "label"
+        :param label_file: hdfs path containing the labels as tsv, including "engaging_user_id", "tweet_id", `engagement`
         """
-        predictions_per_model = self.read_predictions(prediction_files)
+        predictions_per_model = self.read_predictions(prediction_files, prediction_schemas)
         predictions = self.join_and_vectorize_predictions(predictions_per_model)
-        labels = self.read_labels(label_file)
+        labels = self.read_labels(label_file, engagement)
         
         test_df = predictions.join(labels, self.INDEX_COLS)
         pred_df = lr_model.transform(test_df)
@@ -59,13 +59,15 @@ class ensemble:
         
         return pd.DataFrame(eval_values)
 
-    def read_predictions(self, prediction_files):
+    def read_predictions(self, prediction_files, prediction_schemas):
         """
         :return a dict with one dataframe per model, each with the columns "engaging_user_id" (string), "tweet_id" (string), `model_name` (double)
         """
         predictions_per_model = {}
         for model_name in prediction_files:
-            df = self.spark.read.csv(path=prediction_files[model_name], sep="\x01", header=True)
+            sep = "\x01" if model_name == "mf" else ","
+            schema = None if model_name not in prediction_schemas else prediction_schemas[model_name]
+            df = self.spark.read.csv(path=prediction_files[model_name], sep=sep, header=True) if schema is None else self.spark.read.csv(path=prediction_files[model_name], sep=sep, schema=schema)
             if len(set(self.INDEX_COLS + ["prediction"]) & set(df.columns)) != 3:
                 raise Exception("Prediction file has missing columns: {}".format(set(self.INDEX_COLS + ["prediction"]) - set(df.columns)))
             
@@ -90,14 +92,14 @@ class ensemble:
             .transform(predictions)\
             .select(self.INDEX_COLS + ["features"])
 
-    def read_labels(self, label_file):
+    def read_labels(self, label_file, engagement):
         """
         :return a dataframe with the columns "engaging_user_id" (string), "tweet_id" (string), "label" (byte)
         """
         labels = self.spark.read.csv(path=label_file, sep="\x01", header=True)
-        if len(set(self.INDEX_COLS + ["label"]) & set(labels.columns)) != 3:
-                raise Exception("Label file has missing columns: {}".format(set(self.INDEX_COLS + ["label"]) - set(labels.columns)))
-        return labels.withColumn("label", F.col("label").cast(ByteType()))
+        if len(set(self.INDEX_COLS + [engagement]) & set(labels.columns)) != 3:
+                raise Exception("Label file has missing columns: {}".format(set(self.INDEX_COLS + [engagement]) - set(labels.columns)))
+        return labels.withColumn("label", F.col(engagement).cast(ByteType()))
 
     def evaluate(self, predictions: DataFrame, labels: DataFrame, p_col: str, thresholds: List[float]):
         """

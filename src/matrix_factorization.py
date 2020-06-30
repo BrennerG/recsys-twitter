@@ -121,7 +121,7 @@ class matrix_factorization:
         log_loss = self.evaluator.log_loss(predictions, e_col=engagement, p_col="prediction")
         return areasUnderPR, log_loss
 
-    def to_submission_format(self, predictions, index_files: dict, threshold=0.5):
+    def to_submission_format(self, predictions, index_files: dict, threshold=None):
         id_indices = {}
         id_columns = ["tweet_id", "engaging_user_id"]
         for id_column in id_columns:
@@ -129,7 +129,8 @@ class matrix_factorization:
             id_indices[id_column] = id_indices[id_column].withColumn(id_column + "_index", F.col(id_column + "_index").cast(IntegerType()))
             predictions = predictions.join(id_indices[id_column], [id_column + "_index"])\
                 .drop(id_column + "_index")
-        predictions = predictions.withColumn("prediction_bool", F.when(F.col("prediction") >= threshold, 1).otherwise(0))
+        if threshold is not None:
+            predictions = predictions.withColumn("prediction_bool", F.when(F.col("prediction") >= threshold, 1).otherwise(0))
         
         return predictions
 
