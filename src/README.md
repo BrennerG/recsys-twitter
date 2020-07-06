@@ -34,3 +34,13 @@
 ### Content Based Approach
 
 This approach runs on the jupyter notebook “src/content_based.ipynb” as a standalone notebook, change the path specs if necessary
+
+### Matrix Factorization
+The code for the preprocessing and model implementation can be found in `mf_preprocessor.py` and `matrix_factorization.py`.
+
+The implementation of grid search and other relevant parts can be found in `mf_grid_search.py`, `mf_train_test_split.py`, and `mf_train_predict.py`.
+
+### Ensemble
+The implementation of bootstrapping for creating the datasets we used for the ensemble can be found in `bootstrapping.ipynb` and `bootstrapping.py`.
+
+The implementation of the ensemble can be found in `ensemble.ipynb` and `ensemble.py`.

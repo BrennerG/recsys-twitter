@@ -2,8 +2,9 @@ import pandas as pd
 from typing import List, Dict
 
 from pyspark import SparkConf, SparkContext
+from pyspark.ml import Pipeline
 from pyspark.ml.evaluation import RegressionEvaluator
-from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.feature import VectorAssembler, MinMaxScaler
 from pyspark.ml.regression import LinearRegression, LinearRegressionModel
 from pyspark.sql import DataFrame, Row, SparkSession
 from pyspark.sql.types import *
@@ -88,7 +89,11 @@ class ensemble:
             else:
                 predictions = predictions.join(df, self.INDEX_COLS)
         
-        return VectorAssembler(inputCols=list(predictions_per_model.keys()), outputCol="features")\
+        vector_assembler = VectorAssembler(inputCols=list(predictions_per_model.keys()), outputCol="vectors")
+        min_max_scaler = MinMaxScaler(inputCol="vectors", outputCol="features")
+        pipeline = Pipeline(stages=[vector_assembler, min_max_scaler])
+        return pipeline\
+            .fit(predictions)\
             .transform(predictions)\
             .select(self.INDEX_COLS + ["features"])
 
