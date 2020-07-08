@@ -20,7 +20,8 @@ import torch.nn.functional as F
 class NNPreprocessor:
 
     def get_id_indices(self,df, id_column):
-        id_indices = df.select(id_column).orderBy(id_column).rdd.zipWithIndex().toDF()
+        # id_indices = df.select(id_column).orderBy(id_column).rdd.zipWithIndex().toDF()
+        id_indices = df.select(id_column).dropDuplicates([id_column]).orderBy(id_column).rdd.zipWithIndex().toDF()
         id_indices = id_indices.withColumn(id_column, Fun.col("_1")[id_column])\
             .select(Fun.col(id_column), Fun.col("_2").alias(id_column + "_index"))
         return id_indices
@@ -64,16 +65,7 @@ class NNPreprocessor:
         ])
         model = pipeline.fit(indexed_data.select(['tweet_id_index', 'engaging_user_id_index', engagement]))
         traindata_ohe = model.transform(indexed_data)
-
-        '''# select and parse to pandas dataframe
-        df = pd.DataFrame(traindata_ohe.select(['tweet_id_ohe', 'user_id_ohe', engagement]).collect(), columns=['tweet_id_ohe', 'user_id_ohe', engagement])
-
-        # create tweets and users vector in correct format    
-        tweet_sparse = self.get_pytorch_sparse("tweet_id_ohe", traindata_ohe)
-        user_sparse = self.get_pytorch_sparse("user_id_ohe", traindata_ohe)
-        tweets = self.transform_to_sparse_tensor(tweet_sparse).to_dense()
-        users = self.transform_to_sparse_tensor(user_sparse).to_dense()'''
-        
+                
         # collect one hot encodings
         tweets = torch.FloatTensor(traindata_ohe.select('tweet_id_ohe').collect())
         tweets = torch.squeeze(tweets, 1)
